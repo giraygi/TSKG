@@ -1,0 +1,142 @@
+# =============================================================================
+# docker-compose.yml
+#
+# Services
+# --------
+#   ontology-prep  Downloads, converts, and merges ontologies into .nq files.
+#                  Runs once and exits. Both subsequent services wait for it.
+#
+#   qlever         Indexes the .nq files and starts the SPARQL HTTP server
+#                  on port 7001. Only starts after ontology-prep succeeds.
+#
+#   qlever-ui      Django web interface on port 8176.
+#                  Only starts after qlever is up.
+#
+# Workflow
+# --------
+#   First run (download + index + serve):
+#       docker compose up --build
+#
+#   Re-index only (data already downloaded, skip prep):
+#       docker compose up qlever qlever-ui
+#
+#   Re-download and re-index everything:
+#       rm data/.prep_done
+#       docker compose up
+#
+#   First-time UI admin setup (run once after qlever-ui is up):
+#       docker compose exec qlever-ui python manage.py createsuperuser
+#       # then visit http://localhost:8176/admin → Backends → Add backend
+#       # set endpoint URL to: http://qlever:7001
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # ontology-prep
+  #   Long-running preparation pipeline. Exits with code 0 when complete.
+  #   Uses the same image as the qlever service (prep.sh overrides the default
+  #   entrypoint). The .prep_done marker file written to /data signals success.
+  # ---------------------------------------------------------------------------
+  ontology-prep:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JENA_VERSION: "5.6.0"
+        ROBOT_VERSION: "1.9.10"
+
+    container_name: ontology-prep
+
+    # Override the default ENTRYPOINT so this service runs prep.sh instead.
+    entrypoint: ["/prep.sh"]
+
+    volumes:
+      - ./data:/data
+
+    environment:
+      - ROBOT_JAVA_ARGS=-Xmx8g
+      - JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF-8
+
+    networks:
+      - qlever-net
+
+    # This service is intentionally not restarted — it runs once and exits.
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # qlever — SPARQL engine
+  #   Waits for ontology-prep to finish successfully, then indexes and serves.
+  # ---------------------------------------------------------------------------
+  qlever:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JENA_VERSION: "5.6.0"
+        ROBOT_VERSION: "1.9.10"
+
+    container_name: qlever
+
+    ports:
+      - "7001:7001"
+
+    volumes:
+      - ./data:/data
+
+    environment:
+      - ROBOT_JAVA_ARGS=-Xmx8g
+      - JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF-8
+
+    depends_on:
+      ontology-prep:
+        condition: service_completed_successfully
+
+    networks:
+      - qlever-net
+
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # qlever-ui — web interface
+  # ---------------------------------------------------------------------------
+  qlever-ui:
+    build:
+      context: https://github.com/qlever-dev/qlever-ui.git
+
+    container_name: qlever-ui
+
+    ports:
+      - "8176:7000"
+
+    volumes:
+      - qlever-ui-db:/app/db
+
+    environment:
+      - QLEVER_BACKEND=http://qlever:7001
+
+    command: >
+      sh -c "python manage.py migrate --no-input &&
+             python manage.py runserver 0.0.0.0:7000"
+
+    depends_on:
+      - qlever
+
+    networks:
+      - qlever-net
+
+    restart: unless-stopped
+
+# -----------------------------------------------------------------------------
+volumes:
+  qlever-ui-db:
+    driver: local
+
+networks:
+  qlever-net:
+    driver: bridge
