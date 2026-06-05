@@ -28,6 +28,7 @@
 #       docker compose exec qlever-ui python manage.py createsuperuser
 #       # then visit http://localhost:8176/admin → Backends → Add backend
 #       # set endpoint URL to: http://qlever:7001
+#       # the TS backend is available in the UI at: http://localhost:8176/ts
 # =============================================================================
 
 services:
@@ -118,12 +119,14 @@ services:
 
     volumes:
       - qlever-ui-db:/app/db
+      - ./config:/workspace
 
     environment:
       - QLEVER_BACKEND=http://qlever:7001
 
     command: >
       sh -c "python manage.py migrate --no-input &&
+             python manage.py loaddata /workspace/backend_template.json &&
              python manage.py runserver 0.0.0.0:7000"
 
     depends_on:
