@@ -28,6 +28,7 @@
 #       docker compose exec qlever-ui python manage.py createsuperuser
 #       # then visit http://localhost:8176/admin → Backends → Add backend
 #       # set endpoint URL to: http://qlever:7001
+#       # the TS backend is available in the UI at: http://localhost:8176/ts
 # =============================================================================
 
 services:
@@ -43,7 +44,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        JENA_VERSION: "5.6.0"
+        JENA_VERSION: "6.0.0"
         ROBOT_VERSION: "1.9.10"
 
     container_name: ontology-prep
@@ -57,7 +58,9 @@ services:
     environment:
       - ROBOT_JAVA_ARGS=-Xmx8g
       - JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF-8
-
+      - TOKEN=${TOKEN}
+      - MIN_ACTIONS=${MIN_ACTIONS:-5000}
+      - DATE=${DATE:-last30}
     networks:
       - qlever-net
 
@@ -73,7 +76,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        JENA_VERSION: "5.6.0"
+        JENA_VERSION: "6.0.0"
         ROBOT_VERSION: "1.9.10"
 
     container_name: qlever
@@ -116,12 +119,14 @@ services:
 
     volumes:
       - qlever-ui-db:/app/db
+      - ./config:/workspace
 
     environment:
       - QLEVER_BACKEND=http://qlever:7001
 
     command: >
       sh -c "python manage.py migrate --no-input &&
+             python manage.py loaddata /workspace/backend_template.json &&
              python manage.py runserver 0.0.0.0:7000"
 
     depends_on:

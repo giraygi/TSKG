@@ -1,0 +1,11 @@
+[
+  {
+    "model": "backend.backend",
+    "pk": 1,
+    "fields": {
+      "name": "TS",
+      "slug": "ts",
+      "baseUrl": "http://localhost:7001"
+    }
+  }
+]
