@@ -23,6 +23,11 @@ CONVERTED_DIR="/data/ontologies/converted"
 MARKER="/data/.prep_done"
 
 mkdir -p /data/ontologies "$CONVERTED_DIR"
+if [[ -d "/data/terminology" ]]; then
+    echo "=== [prep 0/4] copying local terminologies to /opt/ols/dataload/terminology ==="
+    mkdir -p /opt/ols/dataload/terminology
+    cp -R /data/terminology/. /opt/ols/dataload/terminology/
+fi
 
 # ---------------------------------------------------------------------------
 # Step 1 — Matomo stats
